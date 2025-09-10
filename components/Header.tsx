@@ -11,19 +11,13 @@ export default function Header() {
           
           <nav className="flex items-center space-x-6">
             <Link 
-              href="/demo" 
-              className="font-medium hover:text-gray-600 transition-colors"
-            >
-              Demo
-            </Link>
-            <Link 
               href="/about" 
               className="font-medium hover:text-gray-600 transition-colors"
             >
               About
             </Link>
             <a 
-              href="https://github.com/your-username/repo-reader" 
+              href="https://github.com/dprof-in-tech/repo-reader" 
               target="_blank" 
               rel="noopener noreferrer"
               className="btn-secondary text-sm py-2 px-4"

@@ -7,6 +7,7 @@ import AchievementBadges from '@/components/AchievementBadges'
 import LearningModule from '@/components/LearningModule'
 import RepositorySummary from '@/components/RepositorySummary'
 import QuizStatsDisplay from '@/components/QuizStatsDisplay'
+import CodeChatWidget from '@/components/CodeChatWidget'
 
 interface WalkthroughDisplayProps {
   result: AnalysisResult
@@ -180,6 +181,12 @@ export default function WalkthroughDisplay({ result }: WalkthroughDisplayProps) 
           </div>
         </div>
       </div>
+
+      {/* Code Chat Widget */}
+      <CodeChatWidget 
+        repoName={result.repo_data?.repo_name || null}
+        isVisible={true}
+      />
     </div>
   )
 }

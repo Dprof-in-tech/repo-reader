@@ -10,6 +10,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from tools.repo_reader import RepoReaderTool
 from tools.code_analyzer import CodeAnalyzerTool
 from tools.walkthrough_generator import WalkthroughGeneratorTool
+from tools.code_indexer import CodeIndexerTool, CodeSearchTool
+from tools.rag_query_tool import RAGQueryTool, CodeQuestionTool
 from llm_manager import HybridLLMManager
 
 
@@ -20,6 +22,7 @@ class AgentState(TypedDict):
     repo_data: Dict[str, Any]
     analysis_data: Dict[str, Any]
     walkthrough_data: Dict[str, Any]
+    indexing_data: Dict[str, Any]  # New: TiDB indexing results
     current_step: str
     error: str
     messages: List[Dict[str, str]]
@@ -54,8 +57,14 @@ class RepoAnalysisAgent:
         self.tools = [
             RepoReaderTool(),
             CodeAnalyzerTool(),
-            WalkthroughGeneratorTool()
+            WalkthroughGeneratorTool(),
+            CodeIndexerTool(),
+            CodeSearchTool()
         ]
+        
+        # Initialize RAG tools with LLM
+        self.rag_tool = RAGQueryTool()
+        self.code_question_tool = CodeQuestionTool(llm=self.llm)
         
         
         # Build the workflow graph
@@ -69,13 +78,15 @@ class RepoAnalysisAgent:
         # Add nodes
         workflow.add_node("coordinator", self._coordinator_node)
         workflow.add_node("repo_reader", self._repo_reader_node)
+        workflow.add_node("code_indexer", self._code_indexer_node)  # New: TiDB indexing
         workflow.add_node("code_analyzer", self._code_analyzer_node)
         workflow.add_node("walkthrough_generator", self._walkthrough_generator_node)
         workflow.add_node("finalizer", self._finalizer_node)
         
-        # Define the flow
+        # Define the flow - now includes indexing step
         workflow.add_edge("coordinator", "repo_reader")
-        workflow.add_edge("repo_reader", "code_analyzer")
+        workflow.add_edge("repo_reader", "code_indexer")  # Index after reading
+        workflow.add_edge("code_indexer", "code_analyzer")
         workflow.add_edge("code_analyzer", "walkthrough_generator")
         workflow.add_edge("walkthrough_generator", "finalizer")
         workflow.add_edge("finalizer", END)
@@ -153,6 +164,64 @@ class RepoAnalysisAgent:
             
         except Exception as e:
             state["error"] = f"Repository reading failed: {str(e)}"
+            return state
+    
+    def _code_indexer_node(self, state: AgentState) -> AgentState:
+        """Index repository code into TiDB vector store"""
+        
+        try:
+            if not state.get("repo_data"):
+                state["error"] = "No repository data available for indexing"
+                state["current_step"] = "indexing_failed"
+                return state
+            
+            # Add progress message
+            state["messages"].append({
+                "role": "assistant",
+                "content": "🗄️ Indexing code into TiDB vector store for semantic search..."
+            })
+            
+            # Get the indexer tool and index the repository
+            code_indexer = CodeIndexerTool()
+            result = code_indexer._run(
+                repo_data=state["repo_data"],
+                force_reindex=False  # Don't reindex if already exists
+            )
+            
+            state["indexing_data"] = result
+            
+            if result.get("success"):
+                indexed_files = result.get("indexed_files", 0)
+                total_chunks = result.get("total_chunks", 0)
+                
+                state["current_step"] = "code_analysis"
+                state["messages"].append({
+                    "role": "assistant",
+                    "content": f"✅ Successfully indexed {indexed_files} files ({total_chunks} chunks) for semantic search"
+                })
+            else:
+                # Continue even if indexing fails - it's not critical for basic functionality
+                error_msg = result.get("error", "Unknown indexing error")
+                print(f"⚠️ Indexing failed but continuing: {error_msg}")
+                
+                state["indexing_data"] = {"success": False, "error": error_msg}
+                state["current_step"] = "code_analysis"
+                state["messages"].append({
+                    "role": "assistant", 
+                    "content": "⚠️ Code indexing unavailable - continuing with basic analysis"
+                })
+            
+            return state
+            
+        except Exception as e:
+            # Don't fail the entire process if indexing fails
+            print(f"⚠️ Indexing error but continuing: {e}")
+            state["indexing_data"] = {"success": False, "error": str(e)}
+            state["current_step"] = "code_analysis"
+            state["messages"].append({
+                "role": "assistant",
+                "content": "⚠️ Code indexing encountered an error - continuing with basic analysis"
+            })
             return state
     
     def _code_analyzer_node(self, state: AgentState) -> AgentState:
@@ -257,6 +326,7 @@ class RepoAnalysisAgent:
                 repo_data={},
                 analysis_data={},
                 walkthrough_data={},
+                indexing_data={},
                 current_step="initialization",
                 error="",
                 messages=[]
@@ -327,7 +397,8 @@ class RepoAnalysisAgent:
             "tools_available": [tool.name for tool in self.tools],
             "workflow_steps": [
                 "coordinator",
-                "repo_reader", 
+                "repo_reader",
+                "code_indexer", 
                 "code_analyzer",
                 "walkthrough_generator",
                 "finalizer"
@@ -335,9 +406,52 @@ class RepoAnalysisAgent:
             "supported_features": [
                 "GitHub repository cloning",
                 "Code structure analysis",
-                "Architecture pattern detection",
+                "Architecture pattern detection", 
+                "TiDB vector indexing",
+                "Semantic code search",
+                "RAG-powered code questions",
                 "Gamified walkthrough generation",
                 "Progress tracking",
                 "Interactive learning modules"
             ]
         }
+    
+    def ask_code_question(self, question: str, repo_name: str, user_level: str = "intermediate") -> Dict[str, Any]:
+        """Ask a question about the indexed repository code using RAG"""
+        try:
+            # Use the RAG query tool to answer the question
+            result = self.rag_tool._run(
+                question=question,
+                repo_name=repo_name,
+                user_level=user_level,
+                llm=self.llm
+            )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to answer code question: {str(e)}",
+                "answer": None
+            }
+    
+    def search_code(self, query: str, repo_name: str, search_type: str = "hybrid", limit: int = 5) -> Dict[str, Any]:
+        """Search for code using vector and/or full-text search"""
+        try:
+            code_search_tool = CodeSearchTool()
+            result = code_search_tool._run(
+                query=query,
+                repo_name=repo_name, 
+                search_type=search_type,
+                limit=limit
+            )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Code search failed: {str(e)}",
+                "results": []
+            }

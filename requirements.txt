@@ -16,3 +16,10 @@ torch
 accelerate
 gpt-oss
 
+# TiDB and Vector Search Integration
+pymysql
+sqlalchemy
+tidb-vector
+sentence-transformers
+numpy
+

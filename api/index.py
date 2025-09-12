@@ -225,5 +225,95 @@ def test_llm():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route("/api/ask", methods=["POST"])
+def ask_code_question():
+    """Ask a question about repository code using RAG"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        question = data.get("question")
+        repo_name = data.get("repo_name")
+        user_level = data.get("user_level", "intermediate")
+        stream = data.get("stream", False)
+        
+        if not question:
+            return jsonify({"error": "question is required"}), 400
+        
+        if not repo_name:
+            return jsonify({"error": "repo_name is required"}), 400
+        
+        if stream:
+            # Return streaming response for long queries
+            def generate_response():
+                import json
+                import time
+                
+                # Send progress update
+                yield f"data: {json.dumps({'type': 'progress', 'message': '🔍 Searching for relevant code...'})}\n\n"
+                time.sleep(0.1)
+                
+                # Use the agent's RAG functionality
+                result = agent.ask_code_question(question, repo_name, user_level)
+                
+                # Send final result
+                yield f"data: {json.dumps({'type': 'complete', 'result': result})}\n\n"
+            
+            return Response(generate_response(), mimetype='text/event-stream',
+                          headers={'Cache-Control': 'no-cache', 
+                                 'Connection': 'keep-alive',
+                                 'Access-Control-Allow-Origin': '*'})
+        else:
+            # Use the agent's RAG functionality
+            result = agent.ask_code_question(question, repo_name, user_level)
+            
+            if result.get("success"):
+                return jsonify(result), 200
+            else:
+                return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+@app.route("/api/search", methods=["POST"])
+def search_code():
+    """Search repository code using vector/full-text search"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        query = data.get("query")
+        repo_name = data.get("repo_name")
+        search_type = data.get("search_type", "hybrid")
+        limit = data.get("limit", 5)
+        
+        if not query:
+            return jsonify({"error": "query is required"}), 400
+        
+        if not repo_name:
+            return jsonify({"error": "repo_name is required"}), 400
+        
+        # Validate search type
+        valid_types = ["vector", "fulltext", "hybrid"]
+        if search_type not in valid_types:
+            return jsonify({
+                "error": f"Invalid search_type. Must be one of: {', '.join(valid_types)}"
+            }), 400
+        
+        # Use the agent's search functionality
+        result = agent.search_code(query, repo_name, search_type, limit)
+        
+        if result.get("success"):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
 if __name__ == "__main__":
     app.run(debug=True, port=5328)

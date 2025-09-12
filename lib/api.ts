@@ -286,3 +286,88 @@ export async function getStatus() {
 
   return await response.json()
 }
+
+export interface CodeQuestionResult {
+  success: boolean
+  error?: string
+  answer?: string
+  sources?: Array<{
+    file_path: string
+    lines: string
+    language: string
+    similarity_score: number
+  }>
+  search_results?: any[]
+  context_used?: number
+  user_level?: string
+}
+
+export async function askCodeQuestion(
+  question: string,
+  repoName: string,
+  userLevel: string = 'intermediate'
+): Promise<CodeQuestionResult> {
+  const response = await fetch(`${API_BASE_URL}/api/ask`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      question,
+      repo_name: repoName,
+      user_level: userLevel
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to ask question: ${response.statusText}`)
+  }
+
+  return await response.json()
+}
+
+export interface CodeSearchResult {
+  success: boolean
+  error?: string
+  query?: string
+  repo_name?: string
+  search_type?: string
+  results_count?: number
+  results?: Array<{
+    file_path: string
+    chunk_id: string
+    content: string
+    full_content: string
+    metadata: any
+    search_type: string
+    similarity_score?: number
+    relevance_score?: number
+    combined_score?: number
+  }>
+}
+
+export async function searchCode(
+  query: string,
+  repoName: string,
+  searchType: 'vector' | 'fulltext' | 'hybrid' = 'hybrid',
+  limit: number = 5
+): Promise<CodeSearchResult> {
+  const response = await fetch(`${API_BASE_URL}/api/search`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query,
+      repo_name: repoName,
+      search_type: searchType,
+      limit
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to search code: ${response.statusText}`)
+  }
+
+  return await response.json()
+}

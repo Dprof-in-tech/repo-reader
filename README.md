@@ -1,7 +1,7 @@
 # 🎮 Repo Reader - AI-Powered Repository Learning
 
 <p align="center">
-  <img src="https://via.placeholder.com/150x150/000000/FFFFFF?text=RR" alt="Repo Reader Logo" width="150" height="150">
+<img width="1512" height="982" alt="Screenshot 2025-09-12 at 22 56 16" src="https://github.com/user-attachments/assets/cdf172b4-33b0-4332-8a52-02ae4a006342" />
 </p>
 
 <p align="center">
@@ -108,6 +108,11 @@ LOCAL_MODEL_PREFER=true
 ```bash
 npm run dev
 ```
+
+After you run npm run dev, it would take a couple of seconds to actually initialize as this project is using a local embedding model so there would be a first time initial download of this model (it is very lightweight) and after that it would be cached. Dont start using the frontend until you see this message
+
+<img width="1512" height="982" alt="Screenshot 2025-09-12 at 22 55 20" src="https://github.com/user-attachments/assets/bf17e267-6b5f-46e8-ab6d-e37e982c3d43" />
+
 
 This starts:
 - **Frontend**: http://localhost:3000 (Next.js)
